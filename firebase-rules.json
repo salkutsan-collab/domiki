@@ -1,0 +1,52 @@
+{
+  "rules": {
+    "rooms": {
+      "domiki-family-4k7m2p9x": {
+        "projects": {
+          ".read": "auth != null",
+          ".write": "auth != null",
+          "$project": {
+            ".validate": "newData.hasChildren(['name', 'world', 'createdAt', 'updatedAt']) && newData.numChildren() <= 5 && newData.parent().numChildren() <= 40",
+            "name": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "thumb": {
+              ".validate": "newData.isString() && newData.val().length <= 40000"
+            },
+            "createdAt": { ".validate": "newData.isNumber()" },
+            "updatedAt": { ".validate": "newData.isNumber()" },
+            "world": {
+              ".validate": "newData.hasChild('bounds') && newData.numChildren() <= 2",
+              "bounds": {
+                ".validate": "newData.hasChildren(['minX', 'maxX', 'minZ', 'maxZ']) && newData.numChildren() <= 4",
+                "minX": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
+                "maxX": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
+                "minZ": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
+                "maxZ": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
+                "$other": { ".validate": false }
+              },
+              "blocks": {
+                ".validate": "newData.numChildren() <= 5000",
+                "$block": {
+                  ".validate": "newData.hasChildren(['x', 'z', 'y', 'type']) && newData.numChildren() <= 4",
+                  "x": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
+                  "z": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
+                  "y": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
+                  "type": { ".validate": "newData.isString() && newData.val().length <= 12" },
+                  "$other": { ".validate": false }
+                }
+              },
+              "$other": { ".validate": false }
+            },
+            "$other": { ".validate": false }
+          }
+        },
+        "$other": { ".validate": false }
+      },
+      "$room": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
