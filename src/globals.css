@@ -87,8 +87,9 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
 
 @media (max-width: 980px) {
   .workspace { grid-template-columns: 160px minmax(400px, 1fr); }
-  .actions { grid-column: 1 / -1; min-height: auto; flex-direction: row; align-items: center; }
-  .view-panel { flex: 1; grid-template-columns: auto 1fr auto; align-items: center; padding: 10px 14px; }
+  .actions { grid-column: 1 / -1; min-height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .view-panel { flex: 1 1 300px; min-width: 260px; grid-template-columns: auto 1fr auto; align-items: center; padding: 10px 14px; }
+  .view-panel input[type="range"] { min-width: 90px; }
   .mission-card { flex: 1; padding: 12px 16px; }
   .mission-icon, .mission-card > p:last-child { display: none; }
   .mission-card h2 { margin-bottom: 0; }
