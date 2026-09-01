@@ -1,5 +1,7 @@
 // Общий архив домиков. Лежит в той же базе Firebase, что и трекер наклеек,
-// но в отдельной ветке - данные игры и наклеек не пересекаются.
+// но в своей «комнате» - данные игры и наклеек не пересекаются. Ветка выбрана
+// внутри rooms не случайно: правила базы разрешают запись только там, и так
+// ничего не надо менять в консоли Firebase.
 //
 // Что важно понимать: ключи Firebase на страницах всегда открыты, это не пароль.
 // Записи закрыты правилом «только для вошедших», вход анонимный. Для домашнего
@@ -16,7 +18,7 @@ const FIREBASE = {
   projectId: 'dima-707',
 };
 
-const ROOM = 'domiki-family-4k7m2p9x';
+const ROOM = 'rooms/domiki-family-4k7m2p9x';
 const CACHE_KEY = 'domiki-archive-cache-v1';
 
 export const MAX_PROJECTS = 30;
@@ -152,7 +154,7 @@ export function watchArchive({ onProjects, onStatus }: ArchiveHandlers) {
         if (!fb.authError) onStatus(snapshot.val() ? 'online' : 'offline');
       });
       stopProjects = fb.onValue(
-        fb.ref(fb.db, `domiki/${ROOM}/projects`),
+        fb.ref(fb.db, `${ROOM}/projects`),
         (snapshot) => {
           const projects = normalizeProjects(snapshot.val());
           writeCache(projects);
@@ -178,8 +180,8 @@ export async function saveProject({ id, name, world, thumb, createdAt }: SaveReq
   const fb = await connect();
   const now = Date.now();
   const target = id
-    ? fb.ref(fb.db, `domiki/${ROOM}/projects/${id}`)
-    : fb.push(fb.ref(fb.db, `domiki/${ROOM}/projects`));
+    ? fb.ref(fb.db, `${ROOM}/projects/${id}`)
+    : fb.push(fb.ref(fb.db, `${ROOM}/projects`));
   await fb.set(target, {
     name: cleanName(name),
     thumb,
@@ -192,7 +194,7 @@ export async function saveProject({ id, name, world, thumb, createdAt }: SaveReq
 
 export async function deleteProject(id: string) {
   const fb = await connect();
-  await fb.remove(fb.ref(fb.db, `domiki/${ROOM}/projects/${id}`));
+  await fb.remove(fb.ref(fb.db, `${ROOM}/projects/${id}`));
 }
 
 // Какой домик сейчас открыт - помним между заходами, чтобы «Сохранить» обновляло его.
