@@ -380,6 +380,12 @@ export default function Game() {
               <Eye size={18} /> Просветить стены
             </button>
           </div>
+          <div className="mission-card">
+            <span className="mission-icon"><House size={26} /></span>
+            <p className="eyebrow">Идея для старта</p>
+            <h2>Построй уютный дом</h2>
+            <p>Сделай стены, добавь голубые окошки, а крышу вынеси за стены - нажимай на боковые стенки кубиков.</p>
+          </div>
           <button className="primary-action" onClick={buildExample}><House size={19} /> Показать домик</button>
           <button className="secondary-action" onClick={undo} disabled={!history.length}>
             <Undo2 size={19} /> Отменить шаг
