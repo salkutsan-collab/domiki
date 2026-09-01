@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Eye,
+  FolderOpen,
   Hammer,
   Hand,
   House,
@@ -15,6 +16,18 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react';
+import type { ArchiveStatus, OpenMark, SavedProject } from './archive';
+import {
+  MAX_BLOCKS,
+  cleanName,
+  deleteProject,
+  readOpenMark,
+  saveProject,
+  watchArchive,
+  writeOpenMark,
+} from './archive';
+import ProjectsPanel from './projects-panel';
+import { makeThumbnail } from './thumbnail';
 import type { Camera, View } from './camera';
 import { DEFAULT_CAMERA, clampCamera, turnCamera } from './camera';
 import type { Cell, Face } from './hit';
@@ -62,6 +75,13 @@ export default function Game() {
   const [hint, setHint] = useState(MODE_HINTS.build);
   const [saved, setSaved] = useState(false);
   const [ready, setReady] = useState(false);
+  const [projects, setProjects] = useState<SavedProject[]>([]);
+  const [archiveStatus, setArchiveStatus] = useState<ArchiveStatus>('connecting');
+  const [archiveMessage, setArchiveMessage] = useState('');
+  const [openMark, setOpenMark] = useState<OpenMark | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const built = topFloor(world.blocks);
   const floors = floorLimit === null ? MAX_HEIGHT : Math.min(floorLimit, built);
@@ -76,7 +96,27 @@ export default function Game() {
   useEffect(() => {
     const stored = loadWorld();
     if (stored) setWorld(stored);
+    setOpenMark(readOpenMark());
     setReady(true);
+  }, []);
+
+  // К архиву подключаемся не сразу, а когда игра уже нарисована: библиотека базы
+  // весит больше самой игры, и ждать ее на старте незачем.
+  useEffect(() => {
+    let stop = () => {};
+    const timer = window.setTimeout(() => {
+      stop = watchArchive({
+        onProjects: setProjects,
+        onStatus: (status, message) => {
+          setArchiveStatus(status);
+          setArchiveMessage(message ?? '');
+        },
+      });
+    }, 1200);
+    return () => {
+      window.clearTimeout(timer);
+      stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -243,6 +283,7 @@ export default function Game() {
     remember({ blocks: [], bounds: defaultBounds() });
     setFloorLimit(null);
     setCameraState(DEFAULT_CAMERA);
+    rememberOpen(null);
   };
 
   const buildExample = () => {
@@ -250,6 +291,7 @@ export default function Game() {
     const blocks = makeHouse(world.bounds);
     remember({ blocks, bounds: boundsForBlocks(world.bounds, blocks) });
     setFloorLimit(null);
+    rememberOpen(null);
     chooseMode('build');
   };
 
@@ -275,6 +317,66 @@ export default function Game() {
   const resetView = () => {
     setCameraState(DEFAULT_CAMERA);
     showHint('Вид как в начале');
+  };
+
+  const rememberOpen = (mark: OpenMark | null) => {
+    setOpenMark(mark);
+    writeOpenMark(mark);
+  };
+
+  const saveToArchive = async (name: string, mode: 'update' | 'new') => {
+    if (!world.blocks.length) {
+      setNotice('Полянка пустая - сначала построй домик');
+      return;
+    }
+    if (world.blocks.length > MAX_BLOCKS) {
+      setNotice(`Кубиков больше ${MAX_BLOCKS} - такой домик в архив не влезет`);
+      return;
+    }
+    setBusy(true);
+    setNotice('');
+    try {
+      const updating = mode === 'update' && openMark ? openMark : null;
+      const id = await saveProject({
+        id: updating?.id,
+        createdAt: updating?.createdAt,
+        name,
+        world,
+        thumb: makeThumbnail(world),
+      });
+      rememberOpen({ id, name: cleanName(name), createdAt: updating?.createdAt ?? Date.now() });
+      setNotice(updating ? 'Домик обновлен в общем архиве' : 'Домик сохранен в общий архив');
+    } catch (error) {
+      setNotice(`Не удалось сохранить: ${error instanceof Error ? error.message : 'нет связи'}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openFromArchive = (project: SavedProject) => {
+    const ask = `Открыть домик «${project.name}»? Постройка на полянке заменится.`;
+    if (world.blocks.length && !window.confirm(ask)) return;
+    remember(project.world);
+    rememberOpen({ id: project.id, name: project.name, createdAt: project.createdAt });
+    setFloorLimit(null);
+    setCameraState(DEFAULT_CAMERA);
+    setPanelOpen(false);
+    chooseMode('build');
+    showHint(`Открыт домик: ${project.name}`);
+  };
+
+  const removeFromArchive = async (project: SavedProject) => {
+    if (!window.confirm(`Убрать домик «${project.name}» из архива? Насовсем.`)) return;
+    setBusy(true);
+    try {
+      await deleteProject(project.id);
+      if (openMark?.id === project.id) rememberOpen(null);
+      setNotice(`Домик «${project.name}» убран из архива`);
+    } catch (error) {
+      setNotice(`Не удалось убрать: ${error instanceof Error ? error.message : 'нет связи'}`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const boardSize = `${world.bounds.maxX - world.bounds.minX + 1} на ${world.bounds.maxZ - world.bounds.minZ + 1}`;
@@ -390,13 +492,41 @@ export default function Game() {
           <button className="secondary-action" onClick={undo} disabled={!history.length}>
             <Undo2 size={19} /> Отменить шаг
           </button>
+          <button
+            className="archive-action"
+            onClick={() => {
+              setNotice('');
+              setPanelOpen(true);
+            }}
+          >
+            <FolderOpen size={19} /> Мои домики
+            {projects.length ? <span className="archive-count">{projects.length}</span> : null}
+          </button>
           <button className="quiet-action" onClick={resetWorld}><RotateCcw size={17} /> Новая полянка</button>
           <div className="counter">
             <strong>{world.blocks.length}</strong>
-            <span>кубиков на полянке<br />полянка {boardSize}</span>
+            <span>
+              кубиков на полянке<br />полянка {boardSize}
+              {openMark ? <><br />домик «{openMark.name}»</> : null}
+            </span>
           </div>
         </aside>
       </section>
+      {panelOpen ? (
+        <ProjectsPanel
+          projects={projects}
+          status={archiveStatus}
+          statusMessage={archiveMessage}
+          openId={openMark?.id ?? null}
+          suggestedName={openMark?.name ?? ''}
+          busy={busy}
+          notice={notice}
+          onClose={() => setPanelOpen(false)}
+          onSave={saveToArchive}
+          onOpen={openFromArchive}
+          onDelete={removeFromArchive}
+        />
+      ) : null}
     </main>
   );
 }

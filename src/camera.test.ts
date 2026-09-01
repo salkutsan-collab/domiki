@@ -7,6 +7,7 @@ import {
   MIN_ZOOM,
   clampCamera,
   depthKey,
+  fitCamera,
   project,
   turnCamera,
   visibleSides,
@@ -103,5 +104,39 @@ describe('пределы камеры', () => {
 
   it('поворот вокруг оси не ограничивает - крутить можно бесконечно', () => {
     expect(clampCamera({ ...DEFAULT_CAMERA, yaw: 100 }).yaw).toBe(100);
+  });
+});
+
+describe('подгонка вида под постройку', () => {
+  const thumb = { width: 320, height: 200 };
+
+  it('вписывает высокую башню в маленький кадр', () => {
+    const blocks = Array.from({ length: 10 }, (_, y) => ({ x: 5, z: 5, y, type: 'wood' as const }));
+    const camera = fitCamera(DEFAULT_CAMERA, bounds, blocks, thumb);
+    const low = project(camera, bounds, 5, 5, 0, thumb);
+    const high = project(camera, bounds, 5, 5, 10, thumb);
+    expect(low.y).toBeLessThanOrEqual(thumb.height);
+    expect(high.y).toBeGreaterThanOrEqual(0);
+    expect(camera.zoom).toBeLessThan(1);
+  });
+
+  it('ставит постройку в середину кадра', () => {
+    const blocks = [{ x: 1, z: 1, y: 0, type: 'wood' as const }];
+    const camera = fitCamera(DEFAULT_CAMERA, bounds, blocks, thumb);
+    const center = project(camera, bounds, 1, 1, 0.5, thumb);
+    expect(center.x).toBeCloseTo(thumb.width / 2, 0);
+    expect(center.y).toBeCloseTo(thumb.height / 2, 0);
+  });
+
+  it('на пустой полянке показывает всю траву и не ломается', () => {
+    const camera = fitCamera(DEFAULT_CAMERA, bounds, [], thumb);
+    expect(Number.isFinite(camera.zoom)).toBe(true);
+    expect(camera.zoom).toBeGreaterThan(0);
+  });
+
+  it('не выходит за пределы приближения', () => {
+    const one = fitCamera(DEFAULT_CAMERA, bounds, [{ x: 5, z: 5, y: 0, type: 'wood' as const }], thumb);
+    expect(one.zoom).toBeLessThanOrEqual(MAX_ZOOM);
+    expect(one.zoom).toBeGreaterThanOrEqual(MIN_ZOOM);
   });
 });

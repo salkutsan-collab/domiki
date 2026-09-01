@@ -113,9 +113,14 @@ function isMaterial(value: unknown): value is Material {
 }
 
 function readBlocks(value: unknown): Block[] | null {
-  if (!Array.isArray(value)) return null;
+  const list = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value as Record<string, unknown>)
+      : null;
+  if (!list) return null;
   const blocks: Block[] = [];
-  for (const item of value) {
+  for (const item of list) {
     if (!item || typeof item !== 'object') return null;
     const { x, z, y, type } = item as Record<string, unknown>;
     if (typeof x !== 'number' || typeof z !== 'number' || typeof y !== 'number') return null;
@@ -134,14 +139,22 @@ function readBounds(value: unknown): Bounds | null {
   return bounds;
 }
 
+// Разбор записи «кубики плюс границы» - и из хранилища браузера, и из общего архива.
+export function readWorld(value: unknown): World | null {
+  if (!value || typeof value !== 'object') return null;
+  const data = value as Record<string, unknown>;
+  const blocks = readBlocks(data.blocks ?? []);
+  const bounds = readBounds(data.bounds);
+  if (!blocks || !bounds) return null;
+  return { blocks, bounds: boundsForBlocks(bounds, blocks) };
+}
+
 // Разбор сохранения. Старый формат (просто список кубиков) переносится на полянку 12 на 12.
 export function parseSaved(current: string | null, legacy: string | null): World | null {
   if (current) {
     try {
-      const data = JSON.parse(current) as Record<string, unknown>;
-      const blocks = readBlocks(data.blocks);
-      const bounds = readBounds(data.bounds);
-      if (blocks && bounds) return { blocks, bounds: boundsForBlocks(bounds, blocks) };
+      const world = readWorld(JSON.parse(current));
+      if (world) return world;
     } catch { /* Испорченное сохранение просто не читаем. */ }
   }
   if (legacy) {

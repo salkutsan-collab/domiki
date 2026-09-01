@@ -2,7 +2,7 @@
 // Рисуем без перспективы: клетка поворачивается вокруг центра полянки,
 // глубина сплющивается по наклону, высота поднимает кубик вверх по экрану.
 
-import type { Bounds } from './world';
+import type { Block, Bounds } from './world';
 import { boundsCenter } from './world';
 
 export type Camera = { yaw: number; pitch: number; zoom: number; panX: number; panY: number };
@@ -102,4 +102,52 @@ export function sideCorners(
       ? project(camera, bounds, fixed, edge, height, view)
       : project(camera, bounds, edge, fixed, height, view);
   return [corner(from, y + 1), corner(to, y + 1), corner(to, y), corner(from, y)];
+}
+
+// Вид, при котором вся постройка попадает в кадр. Нужен для миниатюр в архиве.
+export function fitCamera(base: Camera, bounds: Bounds, blocks: Block[], view: View, padding = 0.84): Camera {
+  const cells = blocks.length
+    ? blocks.map((block) => ({ x: block.x, z: block.z, y: block.y }))
+    : [
+        { x: bounds.minX, z: bounds.minZ, y: 0 },
+        { x: bounds.maxX, z: bounds.maxZ, y: 0 },
+      ];
+
+  const spread = (camera: Camera) => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    cells.forEach(({ x, z, y }) => {
+      for (const dx of [-0.5, 0.5]) {
+        for (const dz of [-0.5, 0.5]) {
+          for (const dy of [0, 1]) {
+            const point = project(camera, bounds, x + dx, z + dz, y + dy, view);
+            minX = Math.min(minX, point.x);
+            maxX = Math.max(maxX, point.x);
+            minY = Math.min(minY, point.y);
+            maxY = Math.max(maxY, point.y);
+          }
+        }
+      }
+    });
+    return { minX, maxX, minY, maxY };
+  };
+
+  const plain = { ...base, zoom: 1, panX: 0, panY: 0 };
+  const raw = spread(plain);
+  const width = Math.max(raw.maxX - raw.minX, 1);
+  const height = Math.max(raw.maxY - raw.minY, 1);
+  const zoom = Math.min(
+    MAX_ZOOM,
+    Math.max(MIN_ZOOM, Math.min((view.width * padding) / width, (view.height * padding) / height)),
+  );
+
+  const scaled = spread({ ...plain, zoom });
+  return {
+    ...base,
+    zoom,
+    panX: view.width / 2 - (scaled.minX + scaled.maxX) / 2,
+    panY: view.height / 2 - (scaled.minY + scaled.maxY) / 2,
+  };
 }
