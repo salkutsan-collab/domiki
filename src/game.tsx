@@ -26,6 +26,7 @@ import {
   watchArchive,
   writeOpenMark,
 } from './archive';
+import { plural } from './plural';
 import ProjectsPanel from './projects-panel';
 import { makeThumbnail } from './thumbnail';
 import type { Camera, View } from './camera';
@@ -506,7 +507,7 @@ export default function Game() {
           <div className="counter">
             <strong>{world.blocks.length}</strong>
             <span>
-              кубиков на полянке<br />полянка {boardSize}
+              {plural(world.blocks.length, 'кубик', 'кубика', 'кубиков')} на полянке<br />полянка {boardSize}
               {openMark ? <><br />домик «{openMark.name}»</> : null}
             </span>
           </div>

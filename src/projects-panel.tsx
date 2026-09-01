@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Cloud, CloudOff, FolderOpen, Save, Trash2, X } from 'lucide-react';
 import type { ArchiveStatus, SavedProject } from './archive';
 import { MAX_PROJECTS } from './archive';
+import { cubes } from './plural';
 
 const when = new Intl.DateTimeFormat('ru-RU', {
   day: 'numeric',
@@ -119,7 +120,7 @@ export default function ProjectsPanel({
                 )}
                 <h3>{project.name}</h3>
                 <p className="archive-when">
-                  {when.format(new Date(project.updatedAt))} · {project.world.blocks.length} кубиков
+                  {when.format(new Date(project.updatedAt))} · {cubes(project.world.blocks.length)}
                 </p>
                 <div className="archive-card-buttons">
                   <button className="primary-action" disabled={busy} onClick={() => onOpen(project)}>
