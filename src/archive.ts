@@ -21,9 +21,37 @@ const FIREBASE = {
 const ROOM = 'rooms/domiki-family-4k7m2p9x';
 const CACHE_KEY = 'domiki-archive-cache-v1';
 
-export const MAX_PROJECTS = 30;
+// Домики лежат в ячейках 01-40. Так правила базы могут ограничить их число:
+// посчитать записи правила не умеют, а проверить имя ячейки - умеют.
+const SLOT_COUNT = 40;
+export const MAX_PROJECTS = SLOT_COUNT;
 export const MAX_BLOCKS = 5000;
+export const MAX_THUMB = 40000;
 const CACHE_LIMIT = 12;
+
+const SLOT_SHAPE = /^(0[1-9]|[1-3][0-9]|40)$/;
+
+export function isSlot(value: string) {
+  return SLOT_SHAPE.test(value);
+}
+
+export function freeSlots(usedIds: string[]) {
+  const used = new Set(usedIds);
+  const free: string[] = [];
+  for (let index = 1; index <= SLOT_COUNT; index += 1) {
+    const slot = String(index).padStart(2, '0');
+    if (!used.has(slot)) free.push(slot);
+  }
+  return free;
+}
+
+// Ячейку берем случайную из свободных: если двое сохраняют в одну секунду,
+// они вряд ли попадут в одну ячейку и не перезапишут друг друга.
+export function pickSlot(usedIds: string[], roll = Math.random()) {
+  const free = freeSlots(usedIds);
+  if (!free.length) throw new Error(`в архиве уже ${SLOT_COUNT} домиков, убери лишние`);
+  return free[Math.min(free.length - 1, Math.floor(roll * free.length))];
+}
 
 export type SavedProject = {
   id: string;
@@ -96,7 +124,6 @@ type Wired = {
   authError: string;
   onValue: typeof import('firebase/database').onValue;
   ref: typeof import('firebase/database').ref;
-  push: typeof import('firebase/database').push;
   set: typeof import('firebase/database').set;
   remove: typeof import('firebase/database').remove;
 };
@@ -121,7 +148,6 @@ function connect(): Promise<Wired> {
         authError,
         onValue: db.onValue,
         ref: db.ref,
-        push: db.push,
         set: db.set,
         remove: db.remove,
       };
@@ -174,22 +200,28 @@ export function watchArchive({ onProjects, onStatus }: ArchiveHandlers) {
   };
 }
 
-export type SaveRequest = { id?: string; name: string; world: World; thumb: string; createdAt?: number };
+export type SaveRequest = {
+  id?: string;
+  name: string;
+  world: World;
+  thumb: string;
+  createdAt?: number;
+  usedIds: string[];
+};
 
-export async function saveProject({ id, name, world, thumb, createdAt }: SaveRequest) {
+export async function saveProject({ id, name, world, thumb, createdAt, usedIds }: SaveRequest) {
+  const slot = id && isSlot(id) ? id : pickSlot(usedIds);
   const fb = await connect();
   const now = Date.now();
-  const target = id
-    ? fb.ref(fb.db, `${ROOM}/projects/${id}`)
-    : fb.push(fb.ref(fb.db, `${ROOM}/projects`));
-  await fb.set(target, {
+  await fb.set(fb.ref(fb.db, `${ROOM}/projects/${slot}`), {
     name: cleanName(name),
-    thumb,
+    // Слишком большую картинку база не примет - лучше домик без картинки, чем отказ.
+    thumb: thumb.length <= MAX_THUMB ? thumb : '',
     world,
     createdAt: createdAt ?? now,
     updatedAt: now,
   });
-  return target.key ?? '';
+  return slot;
 }
 
 export async function deleteProject(id: string) {

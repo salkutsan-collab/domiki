@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, normalizeProjects } from './archive';
+import { MAX_PROJECTS, cleanName, freeSlots, isSlot, normalizeProjects, pickSlot } from './archive';
 import { defaultBounds } from './world';
 
 const record = (extra: Record<string, unknown> = {}) => ({
@@ -64,5 +64,42 @@ describe('разбор архива', () => {
   it('на мусоре вместо снимка отдает пустой список', () => {
     expect(normalizeProjects(null)).toEqual([]);
     expect(normalizeProjects('строка')).toEqual([]);
+  });
+});
+
+describe('ячейки архива', () => {
+  it('первый домик занимает ячейку 01', () => {
+    expect(pickSlot([], 0)).toBe('01');
+  });
+
+  it('не берет занятые ячейки', () => {
+    expect(pickSlot(['01', '02'], 0)).toBe('03');
+  });
+
+  it('выбирает случайную свободную, чтобы двое не столкнулись', () => {
+    const used = freeSlots([]).slice(0, 38); // свободны только 39 и 40
+    expect(pickSlot(used, 0)).toBe('39');
+    expect(pickSlot(used, 0.99)).toBe('40');
+  });
+
+  it('на крайнем значении случайности не выходит за список', () => {
+    expect(freeSlots([])).toContain(pickSlot([], 1));
+  });
+
+  it('когда все сорок заняты - понятная ошибка', () => {
+    expect(() => pickSlot(freeSlots([]))).toThrowError(/уже 40 домиков/);
+  });
+
+  it('узнает имя ячейки и отвергает старые случайные ключи', () => {
+    expect(isSlot('01')).toBe(true);
+    expect(isSlot('40')).toBe(true);
+    expect(isSlot('00')).toBe(false);
+    expect(isSlot('41')).toBe(false);
+    expect(isSlot('1')).toBe(false);
+    expect(isSlot('-P0Tkb8Ut7FDGdiG1vSQ')).toBe(false);
+  });
+
+  it('всего ячеек сорок', () => {
+    expect(freeSlots([])).toHaveLength(MAX_PROJECTS);
   });
 });

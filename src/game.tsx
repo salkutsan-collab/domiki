@@ -344,6 +344,7 @@ export default function Game() {
         name,
         world,
         thumb: makeThumbnail(world),
+        usedIds: projects.map((project) => project.id),
       });
       rememberOpen({ id, name: cleanName(name), createdAt: updating?.createdAt ?? Date.now() });
       setNotice(updating ? 'Домик обновлен в общем архиве' : 'Домик сохранен в общий архив');

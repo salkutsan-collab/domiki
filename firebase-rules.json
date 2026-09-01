@@ -5,20 +5,20 @@
         "projects": {
           ".read": "auth != null",
           ".write": "auth != null",
-          "$project": {
-            ".validate": "newData.hasChildren(['name', 'world', 'createdAt', 'updatedAt']) && newData.numChildren() <= 5 && newData.parent().numChildren() <= 40",
+          "$slot": {
+            ".validate": "$slot.matches(/^(0[1-9]|[1-3][0-9]|40)$/) && newData.hasChildren(['name', 'world', 'createdAt', 'updatedAt'])",
             "name": {
               ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
             },
             "thumb": {
               ".validate": "newData.isString() && newData.val().length <= 40000"
             },
-            "createdAt": { ".validate": "newData.isNumber()" },
-            "updatedAt": { ".validate": "newData.isNumber()" },
+            "createdAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "updatedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
             "world": {
-              ".validate": "newData.hasChild('bounds') && newData.numChildren() <= 2",
+              ".validate": "newData.hasChild('bounds')",
               "bounds": {
-                ".validate": "newData.hasChildren(['minX', 'maxX', 'minZ', 'maxZ']) && newData.numChildren() <= 4",
+                ".validate": "newData.hasChildren(['minX', 'maxX', 'minZ', 'maxZ'])",
                 "minX": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
                 "maxX": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
                 "minZ": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
@@ -26,9 +26,8 @@
                 "$other": { ".validate": false }
               },
               "blocks": {
-                ".validate": "newData.numChildren() <= 5000",
-                "$block": {
-                  ".validate": "newData.hasChildren(['x', 'z', 'y', 'type']) && newData.numChildren() <= 4",
+                "$index": {
+                  ".validate": "$index.matches(/^[0-9]{1,4}$/) && newData.hasChildren(['x', 'z', 'y', 'type'])",
                   "x": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
                   "z": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
                   "y": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
