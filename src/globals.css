@@ -94,6 +94,12 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
   .mission-card h2 { margin-bottom: 0; }
   .counter { margin: 0 0 0 auto; border: 0; }
 }
+/* Невысокий экран (планшет боком): карточка-подсказка сжимается, чтобы страница не прокручивалась. */
+@media (max-height: 820px) {
+  .mission-icon, .mission-card > p:last-child { display: none; }
+  .mission-card { padding: 12px 16px; }
+  .mission-card h2 { margin-bottom: 0; }
+}
 @media (pointer: coarse) {
   kbd { display: none; }
   .material { min-height: 62px; grid-template-columns: 42px 1fr; font-size: 14px; }
