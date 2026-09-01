@@ -52,15 +52,26 @@ button:focus-visible { outline: 4px solid #ffd35b; outline-offset: 3px; }
 kbd { min-width: 21px; padding: 3px 5px; border-radius: 6px; color: #87918c; background: #f2f0e8; font: 10px/1 system-ui, sans-serif; text-align: center; }
 .eraser { width: 100%; min-height: 48px; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #a53f3b; }
 .eraser.active { border-color: #cb514b; background: #fff0ec; box-shadow: inset 0 0 0 1px #cb514b; }
+.looker { width: 100%; min-height: 48px; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 2px solid #dcdccf; border-radius: 14px; color: #2f5f8a; background: white; cursor: pointer; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+.looker:hover { transform: translateY(-2px); border-color: #88aa96; }
+.looker.active { border-color: #2f6f9e; background: #eaf4fd; box-shadow: inset 0 0 0 1px #2f6f9e; }
 
 .play-area { position: relative; min-width: 0; aspect-ratio: 1100 / 650; overflow: hidden; border: 3px solid #294d3d; border-radius: 26px; background: #c6eaff; box-shadow: 0 8px 0 rgba(41,77,61,.14); }
-canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cursor: crosshair; touch-action: manipulation; user-select: none; }
+canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cursor: crosshair; touch-action: none; user-select: none; }
 .hint-bubble { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 7px; width: max-content; max-width: calc(100% - 24px); padding: 9px 14px; border: 2px solid rgba(41,77,61,.7); border-radius: 999px; background: rgba(255,255,255,.86); box-shadow: 0 4px 0 rgba(41,77,61,.14); font-size: 12px; pointer-events: none; }
 .view-controls { position: absolute; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 8px; padding: 6px; border: 2px solid rgba(41,77,61,.7); border-radius: 16px; background: rgba(255,255,255,.88); }
 .view-controls button { width: 42px; height: 42px; display: grid; place-items: center; border: 0; border-radius: 11px; color: white; background: #367a58; cursor: pointer; }
 .view-controls span { font-size: 11px; color: #66736d; }
 
 .actions { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+.view-panel { padding: 14px; display: grid; gap: 10px; border-radius: 18px; background: #eaf4fd; }
+.view-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.view-label { display: flex; align-items: center; gap: 7px; color: #40584c; }
+.view-row strong { color: #2f6f9e; font-size: 16px; }
+.view-panel input[type="range"] { width: 100%; height: 30px; margin: 0; accent-color: #2f6f9e; cursor: pointer; }
+.view-panel input[type="range"]:disabled { opacity: .4; cursor: not-allowed; }
+.xray-action { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 2px solid #a8c4da; border-radius: 13px; color: #2f5f8a; background: white; cursor: pointer; font-size: 13px; }
+.xray-action.active { border-color: #2f6f9e; color: white; background: #2f6f9e; }
 .mission-card { padding: 16px; border-radius: 18px; background: #fff0c7; }
 .mission-icon { width: 50px; height: 50px; margin-bottom: 14px; display: grid; place-items: center; border: 2px solid #875830; border-radius: 15px; color: #875830; background: #ffd779; }
 .mission-card h2 { margin: 5px 0 8px; font-size: 20px; line-height: 1.05; }
@@ -72,11 +83,12 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
 .quiet-action { min-height: 40px; border: 0; color: #8a554f; background: transparent; font-size: 12px; }
 .counter { margin-top: auto; padding: 14px; display: flex; align-items: center; gap: 10px; border-top: 2px dashed #d7d7c9; }
 .counter strong { font-size: 28px; color: #e87545; }
-.counter span { color: #77827c; font: 11px/1.2 system-ui, sans-serif; }
+.counter span { color: #77827c; font: 11px/1.35 system-ui, sans-serif; }
 
 @media (max-width: 980px) {
   .workspace { grid-template-columns: 160px minmax(400px, 1fr); }
   .actions { grid-column: 1 / -1; min-height: auto; flex-direction: row; align-items: center; }
+  .view-panel { flex: 1; grid-template-columns: auto 1fr auto; align-items: center; padding: 10px 14px; }
   .mission-card { flex: 1; padding: 12px 16px; }
   .mission-icon, .mission-card > p:last-child { display: none; }
   .mission-card h2 { margin-bottom: 0; }
@@ -86,7 +98,9 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
   kbd { display: none; }
   .material { min-height: 62px; grid-template-columns: 42px 1fr; font-size: 14px; }
   .material-swatch { width: 38px; height: 38px; }
-  .eraser, .primary-action, .secondary-action { min-height: 58px; }
+  .eraser, .looker, .primary-action, .secondary-action { min-height: 58px; }
+  .view-panel input[type="range"] { height: 40px; }
+  .xray-action { min-height: 52px; }
   .view-controls button { width: 52px; height: 52px; }
   .fullscreen-button { min-height: 48px; }
 }
@@ -106,6 +120,8 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
   .play-area { order: 1; min-height: 0; }
   .actions { order: 3; display: grid; grid-template-columns: 1fr 1fr; }
   .mission-card, .counter { display: none; }
+  .view-panel { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; align-items: center; padding: 8px 12px; }
+  .view-label { font-size: 11px; }
   .quiet-action { grid-column: 1 / -1; }
   .hint-bubble { top: 10px; font-size: 10px; }
   .view-controls span { display: none; }
