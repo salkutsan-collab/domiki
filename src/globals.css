@@ -108,7 +108,7 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
   .material kbd { display: none; }
   .eraser, .looker, .critter { min-height: 42px; font-size: 13px; }
   .eraser { margin-top: 8px; }
-  .critters { grid-template-columns: 1fr 1fr; margin-top: 8px; }
+  .critters { margin-top: 8px; }
 }
 @media (pointer: coarse) {
   kbd { display: none; }
@@ -210,4 +210,5 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
 @media (max-width: 700px) {
   .critters { grid-template-columns: 1fr 1fr; }
   .critter { min-height: 52px; font-size: 12px; }
+  .critter span:not(.critter-face) { min-width: 0; }
 }
