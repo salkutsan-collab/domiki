@@ -95,11 +95,20 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
   .mission-card h2 { margin-bottom: 0; }
   .counter { margin: 0 0 0 auto; border: 0; }
 }
-/* Невысокий экран (планшет боком): карточка-подсказка сжимается, чтобы страница не прокручивалась. */
+/* Невысокий экран (планшет боком): панели сжимаются, чтобы страница не прокручивалась. */
 @media (max-height: 820px) {
   .mission-icon, .mission-card > p:last-child { display: none; }
   .mission-card { padding: 12px 16px; }
   .mission-card h2 { margin-bottom: 0; }
+  .toolbox { padding: 12px 10px; }
+  .toolbox-title { padding-bottom: 10px; }
+  .materials { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .material { min-height: 50px; grid-template-columns: 26px 1fr; gap: 6px; padding: 5px 6px; font-size: 11px; }
+  .material-swatch { width: 24px; height: 24px; }
+  .material kbd { display: none; }
+  .eraser, .looker, .critter { min-height: 42px; font-size: 13px; }
+  .eraser { margin-top: 8px; }
+  .critters { grid-template-columns: 1fr 1fr; margin-top: 8px; }
 }
 @media (pointer: coarse) {
   kbd { display: none; }
