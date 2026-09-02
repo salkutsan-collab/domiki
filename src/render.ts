@@ -4,6 +4,8 @@
 import type { Camera, Point, SideNormal, View } from './camera';
 import { depthKey, project, sideCorners, topCorners, visibleSides } from './camera';
 import type { Cell, Face } from './hit';
+import type { Walker } from './walkers';
+import { walkerAt } from './walkers';
 import type { Block, Bounds, Material } from './world';
 import { MATERIALS } from './world';
 
@@ -16,6 +18,9 @@ export type Scene = {
   ghost: Cell | null; // куда встанет кубик
   ghostType: Material;
   erase: Cell | null; // какой кубик уберется
+  walkers: Walker[];
+  now: number;
+  collect?: boolean; // собирать ли грани для попадания пальцем
 };
 
 const CLOUDS: [number, number, number][] = [[0.11, 0.15, 0.06], [0.84, 0.19, 0.07], [0.72, 0.08, 0.04]];
@@ -68,7 +73,7 @@ function drawSky(ctx: CanvasRenderingContext2D, view: View) {
   });
 }
 
-function drawGround(ctx: CanvasRenderingContext2D, scene: Scene, view: View, faces: Face[]) {
+function drawGround(ctx: CanvasRenderingContext2D, scene: Scene, view: View, faces: Face[] | null) {
   const { bounds, camera } = scene;
   for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
     for (let z = bounds.minZ; z <= bounds.maxZ; z += 1) {
@@ -77,7 +82,7 @@ function drawGround(ctx: CanvasRenderingContext2D, scene: Scene, view: View, fac
       const points = topCorners(camera, bounds, x, z, 0, view);
       const light = (x + z) % 2 === 0;
       polygon(ctx, points, light ? '#8fd06a' : '#84c661', '#6eaa54');
-      faces.push({ points, x, z, y: -1, kind: 'ground', nx: 0, nz: 0 });
+      faces?.push({ points, x, z, y: -1, kind: 'ground', nx: 0, nz: 0 });
     }
   }
 }
@@ -88,7 +93,7 @@ function drawBlock(
   view: View,
   block: Block,
   sides: SideNormal[],
-  faces: Face[],
+  faces: Face[] | null,
 ) {
   const { bounds, camera, xray } = scene;
   const palette = MATERIALS[block.type];
@@ -99,7 +104,7 @@ function drawBlock(
     const points = sideCorners(camera, bounds, block.x, block.z, block.y, side, view);
     const fill = side.nx !== 0 ? palette.color : palette.side;
     polygon(ctx, points, fill, edge);
-    faces.push({ points, x: block.x, z: block.z, y: block.y, kind: 'side', nx: side.nx, nz: side.nz });
+    faces?.push({ points, x: block.x, z: block.z, y: block.y, kind: 'side', nx: side.nx, nz: side.nz });
   });
 
   const top = topCorners(camera, bounds, block.x, block.z, block.y + 1, view);
@@ -113,7 +118,94 @@ function drawBlock(
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  faces.push({ points: top, x: block.x, z: block.z, y: block.y, kind: 'top', nx: 0, nz: 0 });
+  faces?.push({ points: top, x: block.x, z: block.z, y: block.y, kind: 'top', nx: 0, nz: 0 });
+}
+
+// Коробка произвольного размера в клетке - из таких собраны жители и овечки.
+function drawBox(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  bounds: Bounds,
+  view: View,
+  place: { x: number; z: number; low: number; high: number; half: number },
+  sides: SideNormal[],
+  colors: { top: string; light: string; dark: string },
+) {
+  const { x, z, low, high, half } = place;
+  sides.forEach((side) => {
+    const alongX = side.nx !== 0;
+    const fixed = alongX ? x + side.nx * half : z + side.nz * half;
+    const from = alongX ? z - half : x - half;
+    const to = alongX ? z + half : x + half;
+    const corner = (edge: number, height: number) =>
+      alongX
+        ? project(camera, bounds, fixed, edge, height, view)
+        : project(camera, bounds, edge, fixed, height, view);
+    polygon(ctx, [corner(from, high), corner(to, high), corner(to, low), corner(from, low)],
+      alongX ? colors.light : colors.dark, 'rgba(58,64,54,.75)');
+  });
+  polygon(ctx, [
+    project(camera, bounds, x - half, z - half, high, view),
+    project(camera, bounds, x + half, z - half, high, view),
+    project(camera, bounds, x + half, z + half, high, view),
+    project(camera, bounds, x - half, z + half, high, view),
+  ], colors.top, 'rgba(58,64,54,.75)');
+}
+
+function shade(hex: string, factor: number) {
+  const value = parseInt(hex.slice(1), 16);
+  const mix = (part: number) => Math.max(0, Math.min(255, Math.round(part * factor)));
+  return `rgb(${mix((value >> 16) & 255)}, ${mix((value >> 8) & 255)}, ${mix(value & 255)})`;
+}
+
+function drawPerson(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  view: View,
+  spot: { x: number; z: number; y: number; hop: number },
+  color: string,
+  sides: SideNormal[],
+) {
+  const { bounds, camera } = scene;
+  const base = spot.y + spot.hop;
+  const shirt = { top: shade(color, 1.25), light: color, dark: shade(color, 0.72) };
+  const skin = { top: '#ffe0bd', light: '#f6cfa4', dark: '#d8ab7d' };
+  drawBox(ctx, camera, bounds, view, { x: spot.x, z: spot.z, low: base, high: base + 0.62, half: 0.19 }, sides, shirt);
+  drawBox(ctx, camera, bounds, view, { x: spot.x, z: spot.z, low: base + 0.62, high: base + 1.02, half: 0.15 }, sides, skin);
+}
+
+function drawSheep(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  view: View,
+  spot: { x: number; z: number; y: number; hop: number },
+  sides: SideNormal[],
+) {
+  const { bounds, camera } = scene;
+  const base = spot.y + spot.hop;
+  const wool = { top: '#ffffff', light: '#f2f1ea', dark: '#d9d7cc' };
+  const face = { top: '#5b5750', light: '#4c4842', dark: '#3b3833' };
+  drawBox(ctx, camera, bounds, view, { x: spot.x, z: spot.z, low: base + 0.12, high: base + 0.6, half: 0.26 }, sides, wool);
+  drawBox(ctx, camera, bounds, view, { x: spot.x + 0.22, z: spot.z + 0.22, low: base + 0.1, high: base + 0.42, half: 0.12 }, sides, face);
+}
+
+// Имя пишем поверх всего: иначе своего человечка не найти за стеной.
+function drawName(ctx: CanvasRenderingContext2D, scene: Scene, view: View, walker: Walker) {
+  const spot = walkerAt(walker, scene.now);
+  const head = project(scene.camera, scene.bounds, spot.x, spot.z, spot.y + spot.hop + 1.15, view);
+  ctx.font = '600 15px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const width = ctx.measureText(walker.name).width + 14;
+  ctx.fillStyle = 'rgba(255,255,255,.86)';
+  ctx.strokeStyle = 'rgba(41,77,61,.55)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(head.x - width / 2, head.y - 11, width, 22, 8);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#294d3d';
+  ctx.fillText(walker.name, head.x, head.y + 1);
 }
 
 function drawGhost(ctx: CanvasRenderingContext2D, scene: Scene, view: View, cell: Cell) {
@@ -146,18 +238,50 @@ function drawEraseMark(ctx: CanvasRenderingContext2D, scene: Scene, view: View, 
 }
 
 export function drawScene(ctx: CanvasRenderingContext2D, view: View, scene: Scene): Face[] {
+  const collect = scene.collect !== false;
   const faces: Face[] = [];
+  const sink = collect ? faces : null;
   drawSky(ctx, view);
-  drawGround(ctx, scene, view, faces);
+  drawGround(ctx, scene, view, sink);
 
   const sides = visibleSides(scene.camera);
-  const visible = scene.blocks
+
+  // Кубики и фигурки рисуем в одном порядке - от дальних к ближним, снизу вверх.
+  // Иначе житель за стеной оказался бы нарисован поверх нее.
+  type Item = { depth: number; y: number; draw: () => void };
+  const items: Item[] = [];
+
+  scene.blocks
     .filter((block) => block.y < scene.floors)
-    .sort((a, b) => depthKey(scene.camera, a.x, a.z) - depthKey(scene.camera, b.x, b.z) || a.y - b.y);
-  visible.forEach((block) => drawBlock(ctx, scene, view, block, sides, faces));
+    .forEach((block) => {
+      items.push({
+        depth: depthKey(scene.camera, block.x, block.z),
+        y: block.y,
+        draw: () => drawBlock(ctx, scene, view, block, sides, sink),
+      });
+    });
+
+  scene.walkers.forEach((walker) => {
+    const spot = walkerAt(walker, scene.now);
+    if (spot.y >= scene.floors) return;
+    items.push({
+      depth: depthKey(scene.camera, spot.x, spot.z),
+      y: spot.y + 0.5,
+      draw: () =>
+        walker.kind === 'person'
+          ? drawPerson(ctx, scene, view, spot, walker.color, sides)
+          : drawSheep(ctx, scene, view, spot, sides),
+    });
+  });
+
+  items.sort((a, b) => a.depth - b.depth || a.y - b.y).forEach((item) => item.draw());
 
   if (scene.erase) drawEraseMark(ctx, scene, view, scene.erase);
   else if (scene.ghost) drawGhost(ctx, scene, view, scene.ghost);
+
+  scene.walkers
+    .filter((walker) => walker.kind === 'person' && walkerAt(walker, scene.now).y < scene.floors)
+    .forEach((walker) => drawName(ctx, scene, view, walker));
 
   return faces;
 }

@@ -176,3 +176,29 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
   .archive { width: 100%; max-height: 100vh; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }
   .archive-list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+/* ---------- Жители и овечки ---------- */
+.critters { margin-top: 10px; display: grid; gap: 8px; }
+.critter { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 2px solid #dcdccf; border-radius: 14px; color: #6b4a86; background: white; cursor: pointer; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+.critter:hover { transform: translateY(-2px); border-color: #88aa96; }
+.critter.active { border-color: #6b4a86; background: #f4eefb; box-shadow: inset 0 0 0 1px #6b4a86; }
+.critter.sheep { color: #4a5a6b; }
+.critter.sheep.active { border-color: #4a6b7f; background: #eef5fb; box-shadow: inset 0 0 0 1px #4a6b7f; }
+.critter-face { font-size: 19px; line-height: 1; }
+
+.name-veil { position: fixed; inset: 0; z-index: 60; padding: 20px; display: grid; place-items: center; background: rgba(28,45,37,.5); }
+.name-card { width: min(400px, 100%); padding: 22px; display: grid; gap: 10px; justify-items: stretch; border: 3px solid #294d3d; border-radius: 24px; background: #fffdf5; box-shadow: 0 12px 0 rgba(41,77,61,.2); }
+.name-badge { width: 44px; height: 44px; justify-self: center; border: 2px solid #294d3d; border-radius: 13px; box-shadow: 0 4px 0 rgba(41,77,61,.3); }
+.name-card label { color: #40584c; font-size: 14px; text-align: center; }
+.name-card input { min-height: 54px; padding: 8px 14px; border: 2px solid #b9c4bb; border-radius: 14px; color: #294d3d; background: #fff; font: 18px/1.2 system-ui, sans-serif; text-align: center; }
+.name-card input:focus { border-color: #367a58; outline: 3px solid #bfe6c8; }
+.name-buttons { display: flex; gap: 8px; }
+.name-buttons button { flex: 1; }
+@media (pointer: coarse) {
+  .critter { min-height: 56px; }
+  .name-card input { min-height: 62px; }
+}
+@media (max-width: 700px) {
+  .critters { grid-template-columns: 1fr 1fr; }
+  .critter { min-height: 52px; font-size: 12px; }
+}

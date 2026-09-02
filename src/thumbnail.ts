@@ -4,6 +4,7 @@
 import type { View } from './camera';
 import { DEFAULT_CAMERA, fitCamera } from './camera';
 import { drawScene } from './render';
+import { walkersFor } from './walkers';
 import type { World } from './world';
 import { MAX_HEIGHT } from './world';
 
@@ -25,6 +26,10 @@ export function makeThumbnail(world: World): string {
     ghost: null,
     ghostType: 'wood',
     erase: null,
+    // На картинке в архиве видно и жителей - так домик еще легче узнать.
+    walkers: walkersFor(world, 0),
+    now: 0,
+    collect: false,
   });
 
   try {

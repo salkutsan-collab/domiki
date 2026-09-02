@@ -33,6 +33,7 @@ const house = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 const withBlocks = (blocks: Record<string, unknown>) => house({ world: { bounds, blocks } });
+const withFolk = (extra: Record<string, unknown>) => house({ world: { bounds, ...extra } });
 
 describe('правила базы: сама игра', () => {
   it('текст правил разобран без ошибок', () => {
@@ -54,6 +55,34 @@ describe('правила базы: сама игра', () => {
   it('домик можно убрать и прочитать архив', () => {
     expect(canWrite(`${ARCHIVE}/01`, null)).toBe(true);
     expect(canRead(ARCHIVE)).toBe(true);
+  });
+});
+
+describe('правила базы: жители и овечки', () => {
+  it('житель с именем и овечка сохраняются', () => {
+    expect(
+      canWrite(`${ARCHIVE}/01`, withFolk({
+        people: { 0: { id: 'pabc123', name: 'Маша', color: '#e0574f', x: 2, z: 3, y: 0 } },
+        sheep: { 0: { id: 'sabc123', x: 7, z: 8 } },
+      })),
+    ).toBe(true);
+  });
+
+  it('имя жителя обязательно и не длиннее 20 знаков', () => {
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ people: { 0: { name: '', x: 1, z: 1 } } }))).toBe(false);
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ people: { 0: { name: 'я'.repeat(21), x: 1, z: 1 } } }))).toBe(false);
+  });
+
+  it('жителей и овечек не больше сотни, и без лишних полей', () => {
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ people: { 100: { name: 'Ох', x: 1, z: 1 } } }))).toBe(false);
+    expect(
+      canWrite(`${ARCHIVE}/01`, withFolk({ people: { 0: { name: 'Ох', x: 1, z: 1, gruz: 'A'.repeat(9000) } } })),
+    ).toBe(false);
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ sheep: { 0: { x: 1, z: 1, gruz: 'A'.repeat(9000) } } }))).toBe(false);
+  });
+
+  it('овечка без координат не проходит', () => {
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ sheep: { 0: { id: 's1' } } }))).toBe(false);
   });
 });
 

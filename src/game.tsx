@@ -5,6 +5,7 @@ import {
   Hammer,
   Hand,
   House,
+  PersonStanding,
   Layers,
   Maximize2,
   RotateCcw,
@@ -26,6 +27,7 @@ import {
   watchArchive,
   writeOpenMark,
 } from './archive';
+import NameDialog from './name-dialog';
 import { plural } from './plural';
 import ProjectsPanel from './projects-panel';
 import { makeThumbnail } from './thumbnail';
@@ -35,11 +37,18 @@ import type { Cell, Face } from './hit';
 import { pickFace, placementTarget } from './hit';
 import { drawScene } from './render';
 import { useGestures } from './use-gestures';
-import type { Block, Material, World } from './world';
+import type { Walker } from './walkers';
+import { advance, landingSpot, occupied, pickWalker, walkersFor } from './walkers';
+import type { Block, Material, Person, Sheep, World } from './world';
 import {
   MATERIALS,
   MAX_HEIGHT,
+  MAX_PEOPLE,
+  MAX_SHEEP,
+  SHIRTS,
   blockAt,
+  cleanPersonName,
+  newId,
   boundsForBlocks,
   defaultBounds,
   grownBounds,
@@ -54,13 +63,17 @@ import {
 const CANVAS: View = { width: 1100, height: 650 };
 const HINT_TIME = 3000;
 
-type Mode = 'build' | 'erase' | 'look';
+type Mode = 'build' | 'erase' | 'look' | 'person' | 'sheep';
 
 const MODE_HINTS: Record<Mode, string> = {
   build: 'Нажми на полянку - кубик встанет сверху. Нажми на боковую стенку - кубик прилипнет сбоку',
-  erase: 'Нажми на кубик, чтобы его убрать',
+  erase: 'Нажми на кубик или на жителя, чтобы убрать',
   look: 'Веди пальцем - полянка крутится. Два пальца - приближение и сдвиг',
+  person: 'Нажми на травку - там поселится житель. Нажми на жителя - поменяешь имя',
+  sheep: 'Нажми на травку - там будет пастись овечка',
 };
+
+const FRAME = 45; // перерисовываем примерно 22 раза в секунду - фигуркам хватает
 
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,6 +96,12 @@ export default function Game() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [renaming, setRenaming] = useState<Person | null>(null);
+
+  // Живые фигурки не часть постройки: они гуляют сами и в сохранение не попадают,
+  // сохраняется только список жителей с именами и местом, где их поселили.
+  const walkers = useRef<Walker[]>([]);
+  const roster = `${world.people.map((one) => one.id).join()}|${world.sheep.map((one) => one.id).join()}`;
 
   const built = topFloor(world.blocks);
   const floors = floorLimit === null ? MAX_HEIGHT : Math.min(floorLimit, built);
@@ -141,6 +160,21 @@ export default function Game() {
     });
   }, []);
 
+  useEffect(() => {
+    walkers.current = walkersFor(world, performance.now());
+    // roster - строка из ключей: пересобираем, только когда состав поменялся,
+    // а не на каждый поставленный кубик.
+  }, [roster]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    walkers.current = walkers.current.map((walker) => {
+      const person = world.people.find((one) => one.id === walker.id);
+      return person ? { ...walker, name: person.name, color: person.color } : walker;
+    });
+  }, [world.people]);
+
+  const taken = useMemo(() => occupied(world.blocks), [world.blocks]);
+
   const target = useMemo<Cell | null>(() => {
     if (!hovered || mode === 'look') return null;
     if (mode === 'erase') {
@@ -152,32 +186,87 @@ export default function Game() {
     return cell;
   }, [hovered, mode, world]);
 
+  // Пока по полянке кто-то ходит, картинку надо перерисовывать. Список граней
+  // для попадания пальцем пересобираем только когда меняется сама постройка.
+  const scene = useRef({ world, camera, floors, xray, mode, target, material, taken });
+  scene.current = { world, camera, floors, xray, mode, target, material, taken };
+  const stillVersion = useRef(0);
+  const drawnVersion = useRef(-1);
+  useEffect(() => {
+    stillVersion.current += 1;
+  }, [world, camera, floors, xray, mode, target, material]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    faces.current = drawScene(ctx, CANVAS, {
-      blocks: world.blocks,
-      bounds: world.bounds,
-      camera,
-      floors,
-      xray,
-      ghost: mode === 'build' ? target : null,
-      ghostType: material,
-      erase: mode === 'erase' ? target : null,
-    });
-  }, [world, camera, floors, xray, mode, target, material]);
 
-  const locate = useCallback((clientX: number, clientY: number) => {
+    let frame = 0;
+    let lastDraw = -Infinity;
+
+    const paint = (now: number) => {
+      frame = requestAnimationFrame(paint);
+      const alive = walkers.current.length > 0;
+      const changed = stillVersion.current !== drawnVersion.current;
+      if (!changed && (!alive || now - lastDraw < FRAME)) return;
+      lastDraw = now;
+
+      const at = scene.current;
+      if (alive) {
+        walkers.current = walkers.current.map((walker) =>
+          advance(walker, at.taken, at.world.bounds, now),
+        );
+      }
+
+      const collected = drawScene(ctx, CANVAS, {
+        blocks: at.world.blocks,
+        bounds: at.world.bounds,
+        camera: at.camera,
+        floors: at.floors,
+        xray: at.xray,
+        ghost: at.mode === 'build' ? at.target : null,
+        ghostType: at.material,
+        erase: at.mode === 'erase' ? at.target : null,
+        walkers: walkers.current,
+        now,
+        collect: changed,
+      });
+      if (changed) {
+        faces.current = collected;
+        drawnVersion.current = stillVersion.current;
+      }
+    };
+
+    frame = requestAnimationFrame(paint);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const pointAt = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const point = {
+    return {
       x: ((clientX - rect.left) / rect.width) * CANVAS.width,
       y: ((clientY - rect.top) / rect.height) * CANVAS.height,
     };
-    return pickFace(faces.current, point);
   }, []);
+
+  const locate = useCallback(
+    (clientX: number, clientY: number) => {
+      const point = pointAt(clientX, clientY);
+      return point ? pickFace(faces.current, point) : null;
+    },
+    [pointAt],
+  );
+
+  const locateWalker = useCallback(
+    (clientX: number, clientY: number) => {
+      const point = pointAt(clientX, clientY);
+      if (!point) return null;
+      return pickWalker(walkers.current, camera, world.bounds, CANVAS, point, performance.now());
+    },
+    [camera, pointAt, world.bounds],
+  );
 
   const place = useCallback(
     (face: Face) => {
@@ -190,6 +279,7 @@ export default function Game() {
       if (blockAt(world.blocks, cell.x, cell.z, cell.y)) return;
       const block: Block = { x: cell.x, z: cell.z, y: cell.y, type: material };
       remember({
+        ...world,
         blocks: [...world.blocks, block],
         bounds: grownBounds(world.bounds, cell.x, cell.z),
       });
@@ -204,22 +294,98 @@ export default function Game() {
     (face: Face) => {
       if (face.kind === 'ground') return;
       remember({
+        ...world,
         blocks: world.blocks.filter(
           (block) => !(block.x === face.x && block.z === face.z && block.y === face.y),
         ),
-        bounds: world.bounds,
       });
       navigator.vibrate?.(12);
     },
     [remember, world],
   );
 
+  const removeWalker = useCallback(
+    (id: string) => {
+      remember({
+        ...world,
+        people: world.people.filter((one) => one.id !== id),
+        sheep: world.sheep.filter((one) => one.id !== id),
+      });
+      navigator.vibrate?.(12);
+    },
+    [remember, world],
+  );
+
+  // Житель или овечка встают на клетку, куда ткнули: человек может забраться повыше,
+  // овечка живет только на траве.
+  const settle = useCallback(
+    (face: Face, kind: 'person' | 'sheep') => {
+      const spot = landingSpot(taken, world.bounds, face.x, face.z, kind === 'person');
+      if (!spot) {
+        showHint('Тут занято - выбери свободное место');
+        return;
+      }
+      if (kind === 'sheep') {
+        if (world.sheep.length >= MAX_SHEEP) {
+          showHint(`Овечек уже ${MAX_SHEEP} - больше на полянку не влезет`);
+          return;
+        }
+        remember({ ...world, sheep: [...world.sheep, { id: newId('s'), x: spot.x, z: spot.z }] });
+        showHint('Овечка пришла пастись');
+        navigator.vibrate?.(12);
+        return;
+      }
+      if (world.people.length >= MAX_PEOPLE) {
+        showHint(`Жителей уже ${MAX_PEOPLE} - больше в домики не поместится`);
+        return;
+      }
+      const person: Person = {
+        id: newId('p'),
+        name: `Житель ${world.people.length + 1}`,
+        color: SHIRTS[world.people.length % SHIRTS.length],
+        x: spot.x,
+        z: spot.z,
+        y: spot.y,
+      };
+      remember({ ...world, people: [...world.people, person] });
+      setRenaming(person);
+      navigator.vibrate?.(12);
+    },
+    [remember, showHint, taken, world],
+  );
+
+  const renamePerson = useCallback(
+    (id: string, name: string) => {
+      const clean = cleanPersonName(name);
+      remember({
+        ...world,
+        people: world.people.map((one) => (one.id === id ? { ...one, name: clean } : one)),
+      });
+      setRenaming(null);
+      showHint(`Теперь его зовут ${clean}`);
+    },
+    [remember, showHint, world],
+  );
+
   const gestures = useGestures({
     rotateWithOneFinger: mode === 'look',
     onTap: (clientX, clientY) => {
+      const walker = mode === 'build' ? null : locateWalker(clientX, clientY);
+      if (walker) {
+        if (mode === 'erase') {
+          removeWalker(walker.id);
+          return;
+        }
+        if (mode === 'person' && walker.kind === 'person') {
+          const person = world.people.find((one) => one.id === walker.id);
+          if (person) setRenaming(person);
+          return;
+        }
+      }
       const face = locate(clientX, clientY);
       if (!face) return;
       if (mode === 'erase') erase(face);
+      else if (mode === 'person' || mode === 'sheep') settle(face, mode);
       else place(face);
     },
     onHover: (clientX, clientY) => setHovered(locate(clientX, clientY)),
@@ -281,7 +447,7 @@ export default function Game() {
 
   const resetWorld = () => {
     if (!window.confirm('Очистить всю полянку и начать заново?')) return;
-    remember({ blocks: [], bounds: defaultBounds() });
+    remember({ blocks: [], bounds: defaultBounds(), people: [], sheep: [] });
     setFloorLimit(null);
     setCameraState(DEFAULT_CAMERA);
     rememberOpen(null);
@@ -290,7 +456,7 @@ export default function Game() {
   const buildExample = () => {
     if (world.blocks.length > 3 && !window.confirm('Заменить текущую постройку готовым домиком?')) return;
     const blocks = makeHouse(world.bounds);
-    remember({ blocks, bounds: boundsForBlocks(world.bounds, blocks) });
+    remember({ ...world, blocks, bounds: boundsForBlocks(world.bounds, blocks) });
     setFloorLimit(null);
     rememberOpen(null);
     chooseMode('build');
@@ -434,6 +600,22 @@ export default function Game() {
           >
             <Trash2 size={20} /> Убрать кубик
           </button>
+          <div className="critters">
+            <button
+              className={`critter ${mode === 'person' ? 'active' : ''}`}
+              onClick={() => chooseMode(mode === 'person' ? 'build' : 'person')}
+              aria-pressed={mode === 'person'}
+            >
+              <PersonStanding size={20} /> Человечек
+            </button>
+            <button
+              className={`critter sheep ${mode === 'sheep' ? 'active' : ''}`}
+              onClick={() => chooseMode(mode === 'sheep' ? 'build' : 'sheep')}
+              aria-pressed={mode === 'sheep'}
+            >
+              <span className="critter-face" aria-hidden="true">🐑</span> Овечка
+            </button>
+          </div>
           <button
             className={`looker ${mode === 'look' ? 'active' : ''}`}
             onClick={() => chooseMode(mode === 'look' ? 'build' : 'look')}
@@ -509,11 +691,26 @@ export default function Game() {
             <strong>{world.blocks.length}</strong>
             <span>
               {plural(world.blocks.length, 'кубик', 'кубика', 'кубиков')} на полянке<br />полянка {boardSize}
+              {world.people.length || world.sheep.length ? (
+                <>
+                  <br />
+                  {world.people.length} {plural(world.people.length, 'житель', 'жителя', 'жителей')}
+                  {', '}
+                  {world.sheep.length} {plural(world.sheep.length, 'овечка', 'овечки', 'овечек')}
+                </>
+              ) : null}
               {openMark ? <><br />домик «{openMark.name}»</> : null}
             </span>
           </div>
         </aside>
       </section>
+      {renaming ? (
+        <NameDialog
+          person={renaming}
+          onCancel={() => setRenaming(null)}
+          onSave={(name) => renamePerson(renaming.id, name)}
+        />
+      ) : null}
       {panelOpen ? (
         <ProjectsPanel
           projects={projects}
