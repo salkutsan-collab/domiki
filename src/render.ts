@@ -7,7 +7,7 @@ import type { Cell, Face } from './hit';
 import type { Walker } from './walkers';
 import { walkerAt } from './walkers';
 import type { Block, Bounds, Material } from './world';
-import { MATERIALS } from './world';
+import { MATERIALS, WATER } from './world';
 
 export type Scene = {
   blocks: Block[];
@@ -97,9 +97,11 @@ function drawBlock(
 ) {
   const { bounds, camera, xray } = scene;
   const palette = MATERIALS[block.type];
-  const edge = xray ? 'rgba(75,81,69,.55)' : '#4b5145';
+  const wet = block.type === WATER;
+  const edge = xray || wet ? 'rgba(75,81,69,.55)' : '#4b5145';
 
-  ctx.globalAlpha = xray ? 0.42 : 1;
+  // Сквозь воду видно дно и пловца, поэтому она всегда полупрозрачная.
+  ctx.globalAlpha = xray ? 0.42 : wet ? 0.62 : 1;
   sides.forEach((side) => {
     const points = sideCorners(camera, bounds, block.x, block.z, block.y, side, view);
     const fill = side.nx !== 0 ? palette.color : palette.side;
@@ -116,6 +118,19 @@ function drawBlock(
     ctx.moveTo(top[0].x, top[0].y);
     ctx.lineTo(top[2].x, top[2].y);
     ctx.stroke();
+  }
+  if (wet) {
+    // Две коротких волны поперек клетки - чтобы вода читалась как вода.
+    ctx.strokeStyle = 'rgba(255,255,255,.75)';
+    ctx.lineWidth = 2;
+    [0.38, 0.62].forEach((along) => {
+      const a = { x: top[0].x + (top[1].x - top[0].x) * along, y: top[0].y + (top[1].y - top[0].y) * along };
+      const b = { x: top[3].x + (top[2].x - top[3].x) * along, y: top[3].y + (top[2].y - top[3].y) * along };
+      ctx.beginPath();
+      ctx.moveTo(a.x + (b.x - a.x) * 0.28, a.y + (b.y - a.y) * 0.28);
+      ctx.lineTo(a.x + (b.x - a.x) * 0.72, a.y + (b.y - a.y) * 0.72);
+      ctx.stroke();
+    });
   }
   ctx.globalAlpha = 1;
   faces?.push({ points: top, x: block.x, z: block.z, y: block.y, kind: 'top', nx: 0, nz: 0 });
@@ -158,16 +173,37 @@ function shade(hex: string, factor: number) {
   return `rgb(${mix((value >> 16) & 255)}, ${mix((value >> 8) & 255)}, ${mix(value & 255)})`;
 }
 
+// Круги по воде вокруг пловца.
+function drawRipple(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  view: View,
+  spot: { x: number; z: number; y: number },
+) {
+  const { bounds, camera } = scene;
+  const centre = project(camera, bounds, spot.x, spot.z, spot.y + 1, view);
+  const right = project(camera, bounds, spot.x + 0.42, spot.z, spot.y + 1, view);
+  const radius = Math.max(4, Math.abs(right.x - centre.x));
+  ctx.strokeStyle = 'rgba(255,255,255,.85)';
+  ctx.lineWidth = 2;
+  [1, 0.62].forEach((scale) => {
+    ctx.beginPath();
+    ctx.ellipse(centre.x, centre.y, radius * scale, radius * scale * Math.sin(camera.pitch), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+}
+
 function drawPerson(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
   view: View,
-  spot: { x: number; z: number; y: number; hop: number },
+  spot: { x: number; z: number; y: number; hop: number; sink: number },
   color: string,
   sides: SideNormal[],
 ) {
   const { bounds, camera } = scene;
-  const base = spot.y + spot.hop;
+  const base = spot.y + spot.hop - spot.sink;
+  if (spot.sink > 0.05) drawRipple(ctx, scene, view, spot);
   const shirt = { top: shade(color, 1.25), light: color, dark: shade(color, 0.72) };
   const skin = { top: '#ffe0bd', light: '#f6cfa4', dark: '#d8ab7d' };
   drawBox(ctx, camera, bounds, view, { x: spot.x, z: spot.z, low: base, high: base + 0.62, half: 0.19 }, sides, shirt);
@@ -178,7 +214,7 @@ function drawSheep(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
   view: View,
-  spot: { x: number; z: number; y: number; hop: number },
+  spot: { x: number; z: number; y: number; hop: number; sink: number },
   sides: SideNormal[],
 ) {
   const { bounds, camera } = scene;
@@ -192,7 +228,7 @@ function drawSheep(
 // Имя пишем поверх всего: иначе своего человечка не найти за стеной.
 function drawName(ctx: CanvasRenderingContext2D, scene: Scene, view: View, walker: Walker) {
   const spot = walkerAt(walker, scene.now);
-  const head = project(scene.camera, scene.bounds, spot.x, spot.z, spot.y + spot.hop + 1.15, view);
+  const head = project(scene.camera, scene.bounds, spot.x, spot.z, spot.y + spot.hop - spot.sink + 1.15, view);
   ctx.font = '600 15px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

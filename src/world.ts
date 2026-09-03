@@ -8,9 +8,13 @@ export const MATERIALS = {
   stone: { name: 'Камень', color: '#9aa4ad', top: '#c8cfd4', side: '#737d86' },
   yellow: { name: 'Солнышко', color: '#f5c84c', top: '#ffe98c', side: '#c89424' },
   leaves: { name: 'Листва', color: '#4ea94f', top: '#7cd36f', side: '#357f3b' },
+  water: { name: 'Вода', color: '#3aa7dd', top: '#8ad8f4', side: '#2b7fa8' },
 } as const;
 
 export type Material = keyof typeof MATERIALS;
+
+// Вода - особый кубик: сквозь нее видно, в ней плавают, но кубики она держит.
+export const WATER: Material = 'water';
 export type Block = { x: number; z: number; y: number; type: Material };
 export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 

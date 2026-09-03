@@ -38,7 +38,7 @@ import { pickFace, placementTarget } from './hit';
 import { drawScene } from './render';
 import { useGestures } from './use-gestures';
 import type { Walker } from './walkers';
-import { advance, landingSpot, occupied, pickWalker, walkersFor } from './walkers';
+import { advance, landingSpot, pickWalker, terrain, walkersFor } from './walkers';
 import type { Block, Material, Person, Sheep, World } from './world';
 import {
   MATERIALS,
@@ -69,8 +69,8 @@ const MODE_HINTS: Record<Mode, string> = {
   build: 'Нажми на полянку - кубик встанет сверху. Нажми на боковую стенку - кубик прилипнет сбоку',
   erase: 'Нажми на кубик или на жителя, чтобы убрать',
   look: 'Веди пальцем - полянка крутится. Два пальца - приближение и сдвиг',
-  person: 'Нажми на травку - там поселится житель. Нажми на жителя - поменяешь имя',
-  sheep: 'Нажми на травку - там будет пастись овечка',
+  person: 'Нажми на травку или на воду - там поселится житель. Нажми на жителя - поменяешь имя',
+  sheep: 'Нажми на травку - там будет пастись овечка. В воду овечки не заходят',
 };
 
 const FRAME = 45; // перерисовываем примерно 22 раза в секунду - фигуркам хватает
@@ -161,7 +161,7 @@ export default function Game() {
   }, []);
 
   useEffect(() => {
-    walkers.current = walkersFor(world, performance.now());
+    walkers.current = walkersFor(world, terrain(world.blocks), performance.now());
     // roster - строка из ключей: пересобираем, только когда состав поменялся,
     // а не на каждый поставленный кубик.
   }, [roster]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -173,7 +173,7 @@ export default function Game() {
     });
   }, [world.people]);
 
-  const taken = useMemo(() => occupied(world.blocks), [world.blocks]);
+  const land = useMemo(() => terrain(world.blocks), [world.blocks]);
 
   const target = useMemo<Cell | null>(() => {
     if (!hovered || mode === 'look') return null;
@@ -188,8 +188,8 @@ export default function Game() {
 
   // Пока по полянке кто-то ходит, картинку надо перерисовывать. Список граней
   // для попадания пальцем пересобираем только когда меняется сама постройка.
-  const scene = useRef({ world, camera, floors, xray, mode, target, material, taken });
-  scene.current = { world, camera, floors, xray, mode, target, material, taken };
+  const scene = useRef({ world, camera, floors, xray, mode, target, material, land });
+  scene.current = { world, camera, floors, xray, mode, target, material, land };
   const stillVersion = useRef(0);
   const drawnVersion = useRef(-1);
   useEffect(() => {
@@ -214,7 +214,7 @@ export default function Game() {
       const at = scene.current;
       if (alive) {
         walkers.current = walkers.current.map((walker) =>
-          advance(walker, at.taken, at.world.bounds, now),
+          advance(walker, at.land, at.world.bounds, now),
         );
       }
 
@@ -320,7 +320,7 @@ export default function Game() {
   // овечка живет только на траве.
   const settle = useCallback(
     (face: Face, kind: 'person' | 'sheep') => {
-      const spot = landingSpot(taken, world.bounds, face.x, face.z, kind === 'person');
+      const spot = landingSpot(land, world.bounds, face.x, face.z, kind === 'person');
       if (!spot) {
         showHint('Тут занято - выбери свободное место');
         return;
@@ -351,7 +351,7 @@ export default function Game() {
       setRenaming(person);
       navigator.vibrate?.(12);
     },
-    [remember, showHint, taken, world],
+    [land, remember, showHint, world],
   );
 
   const renamePerson = useCallback(
