@@ -22,14 +22,24 @@ export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 // дело живое и в сохранение не попадает: при открытии домика все выходят из дома.
 export type Person = { id: string; name: string; color: string; x: number; z: number; y: number };
 export type Sheep = { id: string; x: number; z: number };
+// Рыбка помнит и глубину: в глубоком пруду она плавает и у дна.
+export type Fish = { id: string; color: string; x: number; z: number; y: number };
 
-export type World = { blocks: Block[]; bounds: Bounds; people: Person[]; sheep: Sheep[] };
+export type World = {
+  blocks: Block[];
+  bounds: Bounds;
+  people: Person[];
+  sheep: Sheep[];
+  fish: Fish[];
+};
 
 export const MAX_PEOPLE = 12;
 export const MAX_SHEEP = 12;
+export const MAX_FISH = 12;
 export const MAX_NAME = 20;
 
 export const SHIRTS = ['#e0574f', '#3f7fd0', '#e2953a', '#7b57c4', '#2f9c74', '#d45a9a'] as const;
+export const FISH_COLORS = ['#f08a3c', '#ef5d5d', '#f5c84c', '#5ad1c0', '#e87ab8'] as const;
 
 export const MAX_HEIGHT = 12;
 export const START_SIZE = 12;
@@ -82,6 +92,7 @@ export function starterWorld(): World {
     bounds,
     people: [],
     sheep: [],
+    fish: [],
     blocks: [
       { x: 1, z: 1, y: 0, type: 'yellow' },
       { x: 1, z: 1, y: 1, type: 'yellow' },
@@ -193,6 +204,24 @@ function readPeople(value: unknown): Person[] {
     .slice(0, MAX_PEOPLE);
 }
 
+function readFish(value: unknown): Fish[] {
+  return asList(value)
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const { id, color, x, z, y } = item as Record<string, unknown>;
+      if (typeof x !== 'number' || typeof z !== 'number') return null;
+      return {
+        id: typeof id === 'string' && id ? id.slice(0, 12) : newId('f'),
+        color: typeof color === 'string' && color ? color.slice(0, 12) : FISH_COLORS[0],
+        x,
+        z,
+        y: typeof y === 'number' ? y : 0,
+      };
+    })
+    .filter((one): one is Fish => one !== null)
+    .slice(0, MAX_FISH);
+}
+
 function readSheep(value: unknown): Sheep[] {
   return asList(value)
     .map((item) => {
@@ -217,6 +246,7 @@ export function readWorld(value: unknown): World | null {
     bounds: boundsForBlocks(bounds, blocks),
     people: readPeople(data.people),
     sheep: readSheep(data.sheep),
+    fish: readFish(data.fish),
   };
 }
 
@@ -232,7 +262,7 @@ export function parseSaved(current: string | null, legacy: string | null): World
     try {
       const blocks = readBlocks(JSON.parse(legacy));
       if (blocks) {
-        return { blocks, bounds: boundsForBlocks(defaultBounds(), blocks), people: [], sheep: [] };
+        return { blocks, bounds: boundsForBlocks(defaultBounds(), blocks), people: [], sheep: [], fish: [] };
       }
     } catch { /* То же самое для старого формата. */ }
   }

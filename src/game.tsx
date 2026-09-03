@@ -38,11 +38,13 @@ import { pickFace, placementTarget } from './hit';
 import { drawScene } from './render';
 import { useGestures } from './use-gestures';
 import type { Walker } from './walkers';
-import { advance, landingSpot, pickWalker, terrain, walkersFor } from './walkers';
-import type { Block, Material, Person, Sheep, World } from './world';
+import { advance, landingSpot, pickWalker, terrain, walkersFor, waterSpot } from './walkers';
+import type { Block, Material, Person, World } from './world';
 import {
   MATERIALS,
   MAX_HEIGHT,
+  FISH_COLORS,
+  MAX_FISH,
   MAX_PEOPLE,
   MAX_SHEEP,
   SHIRTS,
@@ -63,7 +65,7 @@ import {
 const CANVAS: View = { width: 1100, height: 650 };
 const HINT_TIME = 3000;
 
-type Mode = 'build' | 'erase' | 'look' | 'person' | 'sheep';
+type Mode = 'build' | 'erase' | 'look' | 'person' | 'sheep' | 'fish';
 
 const MODE_HINTS: Record<Mode, string> = {
   build: 'Нажми на полянку - кубик встанет сверху. Нажми на боковую стенку - кубик прилипнет сбоку',
@@ -71,6 +73,7 @@ const MODE_HINTS: Record<Mode, string> = {
   look: 'Веди пальцем - полянка крутится. Два пальца - приближение и сдвиг',
   person: 'Нажми на травку или на воду - там поселится житель. Нажми на жителя - поменяешь имя',
   sheep: 'Нажми на травку - там будет пастись овечка. В воду овечки не заходят',
+  fish: 'Нажми на воду - там заведется рыбка. Рыбки живут только в пруду',
 };
 
 const FRAME = 45; // перерисовываем примерно 22 раза в секунду - фигуркам хватает
@@ -101,7 +104,7 @@ export default function Game() {
   // Живые фигурки не часть постройки: они гуляют сами и в сохранение не попадают,
   // сохраняется только список жителей с именами и местом, где их поселили.
   const walkers = useRef<Walker[]>([]);
-  const roster = `${world.people.map((one) => one.id).join()}|${world.sheep.map((one) => one.id).join()}`;
+  const roster = [world.people, world.sheep, world.fish].map((list) => list.map((one) => one.id).join()).join('|');
 
   const built = topFloor(world.blocks);
   const floors = floorLimit === null ? MAX_HEIGHT : Math.min(floorLimit, built);
@@ -310,6 +313,7 @@ export default function Game() {
         ...world,
         people: world.people.filter((one) => one.id !== id),
         sheep: world.sheep.filter((one) => one.id !== id),
+        fish: world.fish.filter((one) => one.id !== id),
       });
       navigator.vibrate?.(12);
     },
@@ -319,7 +323,29 @@ export default function Game() {
   // Житель или овечка встают на клетку, куда ткнули: человек может забраться повыше,
   // овечка живет только на траве.
   const settle = useCallback(
-    (face: Face, kind: 'person' | 'sheep') => {
+    (face: Face, kind: 'person' | 'sheep' | 'fish') => {
+      if (kind === 'fish') {
+        const pond = waterSpot(land, world.bounds, face.x, face.z);
+        if (!pond) {
+          showHint('Рыбке нужна вода - сначала выложи пруд кубиками воды');
+          return;
+        }
+        if (world.fish.length >= MAX_FISH) {
+          showHint(`Рыбок уже ${MAX_FISH} - больше в пруд не поместится`);
+          return;
+        }
+        const one = {
+          id: newId('f'),
+          color: FISH_COLORS[world.fish.length % FISH_COLORS.length],
+          x: pond.x,
+          z: pond.z,
+          y: pond.y,
+        };
+        remember({ ...world, fish: [...world.fish, one] });
+        showHint('Рыбка поплыла');
+        navigator.vibrate?.(12);
+        return;
+      }
       const spot = landingSpot(land, world.bounds, face.x, face.z, kind === 'person');
       if (!spot) {
         showHint('Тут занято - выбери свободное место');
@@ -385,7 +411,7 @@ export default function Game() {
       const face = locate(clientX, clientY);
       if (!face) return;
       if (mode === 'erase') erase(face);
-      else if (mode === 'person' || mode === 'sheep') settle(face, mode);
+      else if (mode === 'person' || mode === 'sheep' || mode === 'fish') settle(face, mode);
       else place(face);
     },
     onHover: (clientX, clientY) => setHovered(locate(clientX, clientY)),
@@ -447,7 +473,7 @@ export default function Game() {
 
   const resetWorld = () => {
     if (!window.confirm('Очистить всю полянку и начать заново?')) return;
-    remember({ blocks: [], bounds: defaultBounds(), people: [], sheep: [] });
+    remember({ blocks: [], bounds: defaultBounds(), people: [], sheep: [], fish: [] });
     setFloorLimit(null);
     setCameraState(DEFAULT_CAMERA);
     rememberOpen(null);
@@ -615,6 +641,13 @@ export default function Game() {
             >
               <span className="critter-face" aria-hidden="true">🐑</span> Овечка
             </button>
+            <button
+              className={`critter fish ${mode === 'fish' ? 'active' : ''}`}
+              onClick={() => chooseMode(mode === 'fish' ? 'build' : 'fish')}
+              aria-pressed={mode === 'fish'}
+            >
+              <span className="critter-face" aria-hidden="true">🐟</span> Рыбка
+            </button>
           </div>
           <button
             className={`looker ${mode === 'look' ? 'active' : ''}`}
@@ -691,12 +724,15 @@ export default function Game() {
             <strong>{world.blocks.length}</strong>
             <span>
               {plural(world.blocks.length, 'кубик', 'кубика', 'кубиков')} на полянке<br />полянка {boardSize}
-              {world.people.length || world.sheep.length ? (
+              {world.people.length || world.sheep.length || world.fish.length ? (
                 <>
                   <br />
                   {world.people.length} {plural(world.people.length, 'житель', 'жителя', 'жителей')}
                   {', '}
                   {world.sheep.length} {plural(world.sheep.length, 'овечка', 'овечки', 'овечек')}
+                  {world.fish.length
+                    ? `, ${world.fish.length} ${plural(world.fish.length, 'рыбка', 'рыбки', 'рыбок')}`
+                    : ''}
                 </>
               ) : null}
               {openMark ? <><br />домик «{openMark.name}»</> : null}

@@ -17,24 +17,15 @@
             "updatedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
             "world": {
               ".validate": "newData.hasChild('bounds')",
-              "people": {
+              "$critters": {
                 "$index": {
-                  ".validate": "$index.matches(/^[0-9]{1,2}$/) && newData.hasChildren(['name', 'x', 'z'])",
+                  ".validate": "$index.matches(/^[0-9]{1,2}$/) && newData.hasChildren(['x', 'z'])",
                   "id": { ".validate": "newData.isString() && newData.val().length <= 12" },
                   "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20" },
                   "color": { ".validate": "newData.isString() && newData.val().length <= 12" },
                   "x": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
                   "z": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
                   "y": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
-                  "$other": { ".validate": false }
-                }
-              },
-              "sheep": {
-                "$index": {
-                  ".validate": "$index.matches(/^[0-9]{1,2}$/) && newData.hasChildren(['x', 'z'])",
-                  "id": { ".validate": "newData.isString() && newData.val().length <= 12" },
-                  "x": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
-                  "z": { ".validate": "newData.isNumber() && newData.val() >= -200 && newData.val() <= 200" },
                   "$other": { ".validate": false }
                 }
               },
@@ -55,8 +46,7 @@
                   "type": { ".validate": "newData.isString() && newData.val().length <= 12" },
                   "$other": { ".validate": false }
                 }
-              },
-              "$other": { ".validate": false }
+              }
             },
             "$other": { ".validate": false }
           }

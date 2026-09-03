@@ -225,6 +225,32 @@ function drawSheep(
   drawBox(ctx, camera, bounds, view, { x: spot.x + 0.22, z: spot.z + 0.22, low: base + 0.1, high: base + 0.42, half: 0.12 }, sides, face);
 }
 
+// Рыбка: тельце с хвостиком, целиком под водой.
+function drawFish(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  view: View,
+  spot: { x: number; z: number; y: number; hop: number },
+  color: string,
+  sides: SideNormal[],
+) {
+  const { bounds, camera } = scene;
+  // Держится в середине своей клетки воды и слегка водит хвостом.
+  const base = spot.y + 0.32 + spot.hop;
+  const body = { top: shade(color, 1.3), light: color, dark: shade(color, 0.7) };
+  const tail = { top: shade(color, 1.1), light: shade(color, 0.85), dark: shade(color, 0.6) };
+  drawBox(ctx, camera, bounds, view, { x: spot.x, z: spot.z, low: base, high: base + 0.2, half: 0.16 }, sides, body);
+  drawBox(
+    ctx,
+    camera,
+    bounds,
+    view,
+    { x: spot.x - 0.2, z: spot.z - 0.2, low: base + 0.03, high: base + 0.16, half: 0.07 },
+    sides,
+    tail,
+  );
+}
+
 // Имя пишем поверх всего: иначе своего человечка не найти за стеной.
 function drawName(ctx: CanvasRenderingContext2D, scene: Scene, view: View, walker: Walker) {
   const spot = walkerAt(walker, scene.now);
@@ -303,10 +329,11 @@ export function drawScene(ctx: CanvasRenderingContext2D, view: View, scene: Scen
     items.push({
       depth: depthKey(scene.camera, spot.x, spot.z),
       y: spot.y + 0.5,
-      draw: () =>
-        walker.kind === 'person'
-          ? drawPerson(ctx, scene, view, spot, walker.color, sides)
-          : drawSheep(ctx, scene, view, spot, sides),
+      draw: () => {
+        if (walker.kind === 'person') drawPerson(ctx, scene, view, spot, walker.color, sides);
+        else if (walker.kind === 'fish') drawFish(ctx, scene, view, spot, walker.color, sides);
+        else drawSheep(ctx, scene, view, spot, sides);
+      },
     });
   });
 

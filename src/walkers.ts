@@ -5,10 +5,11 @@
 // так он входит в дом через дверной проем и поднимается по ступенькам на крышу.
 // В воде житель плавает: держится на поверхности пруда и выбирается на берег.
 // Овечка проще: только по ровной траве, в воду не заходит и никуда не забирается.
+// Рыбка живет наоборот - только внутри воды, зато на любой глубине.
 
 import type { Camera, Point, View } from './camera';
 import { depthKey, project } from './camera';
-import type { Block, Bounds, Person, Sheep } from './world';
+import type { Block, Bounds, Fish, Person, Sheep } from './world';
 import { WATER, insideBounds } from './world';
 
 export type Spot = { x: number; z: number; y: number };
@@ -17,9 +18,11 @@ export type Spot = { x: number; z: number; y: number };
 // что сквозь твердое не пройти, а в воде можно плыть.
 export type Terrain = { solid: Set<string>; water: Set<string> };
 
+export type Kind = 'person' | 'sheep' | 'fish';
+
 export type Walker = {
   id: string;
-  kind: 'person' | 'sheep';
+  kind: Kind;
   name: string;
   color: string;
   from: Spot;
@@ -32,9 +35,11 @@ export type Walker = {
 
 const STEP_PERSON = 850; // сколько миллисекунд занимает один шаг
 const STEP_SHEEP = 1300;
+const STEP_FISH = 700; // рыбка снует быстрее всех
 const STEP_SWIM = 1150; // в воде медленнее, чем по траве
 const REST_PERSON = 900; // и сколько потом можно постоять
 const REST_SHEEP = 2200;
+const REST_FISH = 500;
 
 export const SINK = 0.45; // насколько пловец погружается в воду
 
@@ -86,6 +91,49 @@ export function canBe(land: Terrain, bounds: Bounds, x: number, z: number, y: nu
   return canStand(land, bounds, x, z, y) || (swims && canSwim(land, bounds, x, z, y));
 }
 
+// Рыбке нужна просто вода - хоть у поверхности, хоть у дна.
+export function canFishBe(land: Terrain, bounds: Bounds, x: number, z: number, y: number) {
+  return insideBounds(bounds, x, z) && y >= 0 && isWater(land, x, z, y);
+}
+
+// Рыбка ходит по воде во все стороны, включая вверх и вниз.
+export function fishOptions(land: Terrain, bounds: Bounds, at: Spot): Spot[] {
+  const options: Spot[] = [];
+  NEIGHBOURS.forEach(({ dx, dz }) => {
+    const spot = { x: at.x + dx, z: at.z + dz, y: at.y };
+    if (canFishBe(land, bounds, spot.x, spot.z, spot.y)) options.push(spot);
+  });
+  [at.y + 1, at.y - 1].forEach((y) => {
+    if (canFishBe(land, bounds, at.x, at.z, y)) options.push({ x: at.x, z: at.z, y });
+  });
+  return options;
+}
+
+// Верхняя клетка воды в столбце - туда сажаем рыбку, когда ткнули в пруд.
+export function waterSpot(land: Terrain, bounds: Bounds, x: number, z: number): Spot | null {
+  if (!insideBounds(bounds, x, z)) return null;
+  let found: Spot | null = null;
+  for (let y = 0; y <= 20; y += 1) {
+    if (isWater(land, x, z, y)) found = { x, z, y };
+  }
+  return found;
+}
+
+// Если воду убрали, рыбка перебирается в ближайшую оставшуюся.
+export function nearestWater(land: Terrain, from: Spot): Spot | null {
+  let best: Spot | null = null;
+  let bestDistance = Infinity;
+  land.water.forEach((key) => {
+    const [x, z, y] = key.split(',').map(Number);
+    const distance = Math.abs(x - from.x) + Math.abs(z - from.z) + Math.abs(y - from.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = { x, z, y };
+    }
+  });
+  return best;
+}
+
 // Куда можно шагнуть с этого места. Человек умеет вверх и вниз на один кубик
 // и плавает; овечка - только по ровной траве.
 export function stepOptions(land: Terrain, bounds: Bounds, at: Spot, climbs: boolean): Spot[] {
@@ -116,7 +164,7 @@ export function landingSpot(land: Terrain, bounds: Bounds, x: number, z: number,
 }
 
 export function makeWalker(
-  kind: 'person' | 'sheep',
+  kind: Kind,
   id: string,
   name: string,
   color: string,
@@ -139,7 +187,7 @@ export function makeWalker(
 }
 
 export function walkersFor(
-  world: { people: Person[]; sheep: Sheep[] },
+  world: { people: Person[]; sheep: Sheep[]; fish: Fish[] },
   land: Terrain,
   now: number,
 ): Walker[] {
@@ -150,7 +198,10 @@ export function walkersFor(
   const sheep = world.sheep.map((one) =>
     makeWalker('sheep', one.id, '', '#ffffff', { x: one.x, z: one.z, y: 0 }, false, now),
   );
-  return [...people, ...sheep];
+  const fish = world.fish.map((one) =>
+    makeWalker('fish', one.id, '', one.color, { x: one.x, z: one.z, y: one.y }, true, now),
+  );
+  return [...people, ...sheep, ...fish];
 }
 
 // Один шаг жизни. Пока идет - ничего не меняем; дошел - выбираем, куда дальше.
@@ -163,8 +214,9 @@ export function advance(
 ): Walker {
   if (now < walker.arriveAt) return walker;
 
+  const swims = walker.kind === 'fish';
   const climbs = walker.kind === 'person';
-  const restTime = climbs ? REST_PERSON : REST_SHEEP;
+  const restTime = swims ? REST_FISH : climbs ? REST_PERSON : REST_SHEEP;
   const standing = walker.to;
   const wet = (spot: Spot) => isWater(land, spot.x, spot.z, spot.y);
   const wait = (at: Spot) => ({
@@ -178,19 +230,27 @@ export function advance(
   });
 
   // Если под фигуркой построили кубик, ее замуровали или пруд осушили -
-  // переставим на ближайшее подходящее место.
-  if (!canBe(land, bounds, standing.x, standing.z, standing.y, climbs)) {
-    const rescued = landingSpot(land, bounds, standing.x, standing.z, climbs);
+  // переставим на ближайшее подходящее место. Рыбку ищем в оставшейся воде.
+  const stillFits = swims
+    ? canFishBe(land, bounds, standing.x, standing.z, standing.y)
+    : canBe(land, bounds, standing.x, standing.z, standing.y, climbs);
+  if (!stillFits) {
+    const rescued = swims
+      ? nearestWater(land, standing)
+      : landingSpot(land, bounds, standing.x, standing.z, climbs);
     return wait(rescued ?? standing);
   }
 
-  const options = stepOptions(land, bounds, standing, climbs);
+  const options = swims
+    ? fishOptions(land, bounds, standing)
+    : stepOptions(land, bounds, standing, climbs);
   // Иногда просто постоять - так живее, чем бесконечная беготня.
   if (!options.length || roll < 0.18) return wait(standing);
 
   const pick = options[Math.min(options.length - 1, Math.floor(((roll - 0.18) / 0.82) * options.length))];
   const toWater = wet(pick);
   const fromWater = wet(standing);
+  const stepTime = swims ? STEP_FISH : toWater || fromWater ? STEP_SWIM : climbs ? STEP_PERSON : STEP_SHEEP;
   return {
     ...walker,
     from: standing,
@@ -198,7 +258,7 @@ export function advance(
     fromWater,
     toWater,
     startedAt: now,
-    arriveAt: now + (toWater || fromWater ? STEP_SWIM : climbs ? STEP_PERSON : STEP_SHEEP),
+    arriveAt: now + stepTime,
   };
 }
 
@@ -208,7 +268,8 @@ export function walkerAt(walker: Walker, now: number) {
   const done = span <= 0 ? 1 : Math.min(1, Math.max(0, (now - walker.startedAt) / span));
   const eased = done * done * (3 - 2 * done);
   const still = walker.from.x === walker.to.x && walker.from.z === walker.to.z;
-  const sink = (walker.fromWater ? SINK : 0) + ((walker.toWater ? SINK : 0) - (walker.fromWater ? SINK : 0)) * eased;
+  const deep = walker.kind === 'fish' ? 0 : SINK;
+  const sink = (walker.fromWater ? deep : 0) + ((walker.toWater ? deep : 0) - (walker.fromWater ? deep : 0)) * eased;
   // На воде фигурка покачивается, на суше подпрыгивает в шаге.
   const bob = sink > 0 ? Math.sin((now + walker.startedAt) / 520) * 0.05 : 0;
   return {

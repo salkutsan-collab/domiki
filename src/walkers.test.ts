@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   advance,
+  canFishBe,
   canStand,
   canSwim,
+  fishOptions,
   landingSpot,
+  nearestWater,
   stepOptions,
   terrain,
   walkerAt,
   walkersFor,
+  waterSpot,
 } from './walkers';
 import type { Walker } from './walkers';
 import type { Block } from './world';
@@ -156,13 +160,15 @@ describe('фигурки из сохранения', () => {
       {
         people: [{ id: 'p1', name: 'Маша', color: '#e0574f', x: 2, z: 3, y: 1 }],
         sheep: [{ id: 's1', x: 7, z: 8 }],
+        fish: [{ id: 'f1', color: '#f08a3c', x: 4, z: 4, y: 0 }],
       },
-      terrain([]),
+      terrain([water(4, 4, 0)]),
       0,
     );
-    expect(list).toHaveLength(2);
+    expect(list).toHaveLength(3);
     expect(list[0]).toMatchObject({ kind: 'person', name: 'Маша', to: { x: 2, z: 3, y: 1 } });
     expect(list[1]).toMatchObject({ kind: 'sheep', to: { x: 7, z: 8, y: 0 } });
+    expect(list[2]).toMatchObject({ kind: 'fish', to: { x: 4, z: 4, y: 0 } });
   });
 });
 
@@ -244,5 +250,55 @@ describe('вода', () => {
     const walled = advance(swimmer, terrain([block(5, 5, 0)]), bounds, 1000, 0.5);
     expect(walled.to).toEqual({ x: 5, z: 5, y: 1 });
     expect(walled.toWater).toBe(false);
+  });
+});
+
+describe('рыбки', () => {
+  const pond = () => terrain([water(5, 5, 0), water(6, 5, 0), water(5, 5, 1), water(6, 5, 1)]);
+
+  it('рыбке нужна вода и годится любая глубина', () => {
+    const deep = pond();
+    expect(canFishBe(deep, bounds, 5, 5, 0)).toBe(true);
+    expect(canFishBe(deep, bounds, 5, 5, 1)).toBe(true);
+    expect(canFishBe(deep, bounds, 4, 5, 0)).toBe(false);
+  });
+
+  it('из пруда рыбка не выплывает', () => {
+    const options = fishOptions(pond(), bounds, { x: 5, z: 5, y: 0 });
+    options.forEach((spot) => expect(canFishBe(pond(), bounds, spot.x, spot.z, spot.y)).toBe(true));
+    expect(options).not.toContainEqual({ x: 4, z: 5, y: 0 });
+  });
+
+  it('ныряет и всплывает внутри пруда', () => {
+    expect(fishOptions(pond(), bounds, { x: 5, z: 5, y: 0 })).toContainEqual({ x: 5, z: 5, y: 1 });
+    expect(fishOptions(pond(), bounds, { x: 5, z: 5, y: 1 })).toContainEqual({ x: 5, z: 5, y: 0 });
+  });
+
+  it('сажаем рыбку в верхнюю воду столбца, а на траву не сажаем', () => {
+    expect(waterSpot(pond(), bounds, 5, 5)).toEqual({ x: 5, z: 5, y: 1 });
+    expect(waterSpot(pond(), bounds, 1, 1)).toBeNull();
+  });
+
+  it('если воду убрали - рыбка перебирается в ближайшую оставшуюся', () => {
+    const left = terrain([water(9, 9, 0)]);
+    expect(nearestWater(left, { x: 5, z: 5, y: 0 })).toEqual({ x: 9, z: 9, y: 0 });
+    expect(nearestWater(terrain([]), { x: 5, z: 5, y: 0 })).toBeNull();
+  });
+
+  it('рыбка живет своей жизнью: осушили пруд - переплыла в другой', () => {
+    const swimmer = {
+      ...walkerSample(),
+      id: 'f1',
+      kind: 'fish' as const,
+      fromWater: true,
+      toWater: true,
+    };
+    const moved = advance(swimmer, terrain([water(8, 8, 0)]), bounds, 1000, 0.5);
+    expect(moved.to).toEqual({ x: 8, z: 8, y: 0 });
+  });
+
+  it('рыбка не погружается как пловец - она вся в воде', () => {
+    const swimmer = { ...walkerSample(), kind: 'fish' as const, fromWater: true, toWater: true };
+    expect(walkerAt(swimmer, 1000).sink).toBe(0);
   });
 });

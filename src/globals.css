@@ -193,6 +193,8 @@ canvas { width: 100%; height: auto; aspect-ratio: 1100 / 650; display: block; cu
 .critter.active { border-color: #6b4a86; background: #f4eefb; box-shadow: inset 0 0 0 1px #6b4a86; }
 .critter.sheep { color: #4a5a6b; }
 .critter.sheep.active { border-color: #4a6b7f; background: #eef5fb; box-shadow: inset 0 0 0 1px #4a6b7f; }
+.critter.fish { color: #b35a2a; }
+.critter.fish.active { border-color: #d2762f; background: #fdf1e6; box-shadow: inset 0 0 0 1px #d2762f; }
 .critter-face { font-size: 19px; line-height: 1; }
 
 .name-veil { position: fixed; inset: 0; z-index: 60; padding: 20px; display: grid; place-items: center; background: rgba(28,45,37,.5); }

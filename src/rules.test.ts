@@ -84,6 +84,19 @@ describe('правила базы: жители и овечки', () => {
   it('овечка без координат не проходит', () => {
     expect(canWrite(`${ARCHIVE}/01`, withFolk({ sheep: { 0: { id: 's1' } } }))).toBe(false);
   });
+
+  it('рыбки сохраняются вместе с остальными', () => {
+    expect(
+      canWrite(`${ARCHIVE}/01`, withFolk({ fish: { 0: { id: 'fabc12', color: '#f08a3c', x: 5, z: 5, y: 1 } } })),
+    ).toBe(true);
+  });
+
+  it('раздел живности общий - новый вид не потребует править правила заново', () => {
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ cats: { 0: { id: 'c1', name: 'Мурка', x: 2, z: 2 } } }))).toBe(true);
+    // Но и в новом разделе форма проверяется так же строго.
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ cats: { 0: { x: 2, z: 2, gruz: 'A'.repeat(9000) } } }))).toBe(false);
+    expect(canWrite(`${ARCHIVE}/01`, withFolk({ cats: { 0: { x: 2 } } }))).toBe(false);
+  });
 });
 
 describe('правила базы: без входа ничего нельзя', () => {
